@@ -27,7 +27,7 @@ La app procesa el archivo localmente en el navegador, sin enviarlo a ningún ser
 
 ## Requisitos
 
-- Node.js 18 o superior
+- Node.js 22.x
 - npm o yarn
 
 ## Instalación
