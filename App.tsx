@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -33,16 +34,20 @@ const accountsPerPage = 100;
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const { width: windowWidth } = useWindowDimensions();
+  const accountColumns = windowWidth < 560 ? 2 : windowWidth < 900 ? 3 : 5;
   const [fileName, setFileName] = useState('');
   const [entries, setEntries] = useState<ZipEntry[]>([]);
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [followersSource, setFollowersSource] = useState('');
-  const [isFollowersExpanded, setIsFollowersExpanded] = useState(false);
+  const [isFollowersExpanded, setIsFollowersExpanded] = useState(true);
   const [followersPage, setFollowersPage] = useState(0);
   const [following, setFollowing] = useState<Follower[]>([]);
   const [followingSource, setFollowingSource] = useState('');
   const [isFollowingExpanded, setIsFollowingExpanded] = useState(false);
   const [followingPage, setFollowingPage] = useState(0);
+  const [isPendingExpanded, setIsPendingExpanded] = useState(false);
+  const [pendingPage, setPendingPage] = useState(0);
   const [isNotFollowingExpanded, setIsNotFollowingExpanded] = useState(false);
   const [notFollowingPage, setNotFollowingPage] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,12 +68,14 @@ export default function App() {
     setEntries([]);
     setFollowers([]);
     setFollowersSource('');
-    setIsFollowersExpanded(false);
+    setIsFollowersExpanded(true);
     setFollowersPage(0);
     setFollowing([]);
     setFollowingSource('');
     setIsFollowingExpanded(false);
     setFollowingPage(0);
+    setIsPendingExpanded(false);
+    setPendingPage(0);
     setIsNotFollowingExpanded(false);
     setNotFollowingPage(0);
 
@@ -128,7 +135,9 @@ export default function App() {
   };
 
   const followerUsernames = new Set(followers.map((follower) => follower.username));
+  const followingUsernames = new Set(following.map((account) => account.username));
   const notFollowingBack = following.filter((account) => !followerUsernames.has(account.username));
+  const pendingFollows = followers.filter((account) => !followingUsernames.has(account.username));
   const followersPageItems = followers.slice(
     followersPage * accountsPerPage,
     (followersPage + 1) * accountsPerPage,
@@ -141,13 +150,18 @@ export default function App() {
     notFollowingPage * accountsPerPage,
     (notFollowingPage + 1) * accountsPerPage,
   );
+  const pendingPageItems = pendingFollows.slice(
+    pendingPage * accountsPerPage,
+    (pendingPage + 1) * accountsPerPage,
+  );
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <View style={styles.header}>
         <View style={styles.headerInner}>
-          <Text style={styles.title}>ZIP THREADS</Text>
+          <Text style={styles.brand}>THREADS</Text>
+          <Text style={styles.help}>Ayuda</Text>
         </View>
       </View>
 
@@ -162,14 +176,25 @@ export default function App() {
           />
         )}
 
-        <View style={styles.uploadPanel}>
-          <Text style={styles.panelTitle}>Carga tu archivo</Text>
-          <Text style={styles.panelText}>Solo necesitamos el .zip. Todo se procesa localmente en el navegador.</Text>
-          <Pressable style={styles.primaryButton} onPress={openFilePicker} accessibilityRole="button">
-            <Text style={styles.primaryButtonText}>Seleccionar ZIP</Text>
-          </Pressable>
-          <Text style={styles.hint}>Extensión admitida: .zip</Text>
-        </View>
+        {!fileName ? (
+          <>
+            <View style={styles.hero}>
+              <Text style={styles.eyebrow}>THREADS DATA READER</Text>
+              <Text style={styles.title}>Tu red, en orden.</Text>
+              <Text style={styles.subtitle}>Explora tus conexiones de Threads sin enviar tus datos a ningún servidor.</Text>
+            </View>
+
+            <View style={styles.uploadPanel}>
+              <Text style={styles.uploadIcon}>↑</Text>
+              <Text style={styles.panelTitle}>Carga tu archivo de Threads</Text>
+              <Text style={styles.panelText}>Selecciona la descarga de tu información en formato .zip. Todo se procesa localmente en tu navegador.</Text>
+              <Pressable style={styles.primaryButton} onPress={openFilePicker} accessibilityRole="button">
+                <Text style={styles.primaryButtonText}>Buscar archivo .zip</Text>
+              </Pressable>
+              <Text style={styles.hint}>PROCESAMIENTO LOCAL · TUS DATOS NO SALEN DE ESTE DISPOSITIVO</Text>
+            </View>
+          </>
+        ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -183,10 +208,18 @@ export default function App() {
         {fileName && !isLoading ? (
           <View style={styles.results}>
             <View style={styles.resultsHeader}>
-              <View>
+              <Text style={styles.fileIcon}>▤</Text>
+              <View style={styles.fileMeta}>
                 <Text style={styles.sectionLabel}>ARCHIVO CARGADO</Text>
-                <Text style={styles.fileName}>{fileName}</Text>
+                <Text numberOfLines={1} style={styles.fileName}>{fileName}</Text>
               </View>
+              <Text style={styles.readyLabel}>LISTO</Text>
+            </View>
+            <View style={styles.metrics}>
+              <Metric label="Seguidores" count={followers.length} index={0} compact={windowWidth < 640} />
+              <Metric label="Siguiendo" count={following.length} index={1} compact={windowWidth < 640} />
+              <Metric label="Pendientes" count={pendingFollows.length} index={2} compact={windowWidth < 640} />
+              <Metric label="No te siguen" count={notFollowingBack.length} index={3} compact={windowWidth < 640} />
             </View>
             {followersSource ? (
               <View style={styles.followersPanel}>
@@ -196,29 +229,21 @@ export default function App() {
                   onPress={() => setIsFollowersExpanded((expanded) => !expanded)}
                   style={styles.followersHeader}
                 >
-                  <View>
-                    <Text style={styles.sectionLabel}>TUS SEGUIDORES</Text>
-                    <Text style={styles.followersCount}>{followers.length}</Text>
+                  <View style={styles.sectionHeading}>
+                    <Text style={styles.sectionIcon}>◎</Text>
+                    <View>
+                      <Text style={styles.sectionLabel}>PEOPLE WHO FOLLOW YOU</Text>
+                      <Text style={styles.listTitle}>Seguidores</Text>
+                    </View>
                   </View>
                   <View style={styles.followersHeaderRight}>
-                    <Text style={styles.sourceText} numberOfLines={1}>{followersSource}</Text>
-                    <Text style={styles.expandIcon}>{isFollowersExpanded ? '−' : '+'}</Text>
+                    <Text style={styles.panelCount}>{followers.length}</Text>
+                    <Text style={styles.expandIcon}>{isFollowersExpanded ? '⌃' : '⌄'}</Text>
                   </View>
                 </Pressable>
                 {isFollowersExpanded && followers.length ? (
                   <View style={styles.followersList}>
-                    <View style={styles.accountsGrid}>
-                    {followersPageItems.map((follower) => (
-                      <View
-                        key={follower.username}
-                        style={styles.accountTile}
-                      >
-                        <Text style={styles.avatar}>{follower.username.slice(0, 1).toUpperCase()}</Text>
-                        <Text style={styles.username}>@{follower.username}</Text>
-                        <ProfileLink href={follower.href} onPress={() => openProfile(follower.href)} />
-                      </View>
-                    ))}
-                    </View>
+                    <AccountGrid accounts={followersPageItems} page={followersPage} columns={accountColumns} onOpen={openProfile} />
                     <Pagination
                       page={followersPage}
                       totalItems={followers.length}
@@ -239,29 +264,21 @@ export default function App() {
                   onPress={() => setIsFollowingExpanded((expanded) => !expanded)}
                   style={styles.followersHeader}
                 >
-                  <View>
-                    <Text style={styles.sectionLabel}>CUENTAS QUE SIGUES</Text>
-                    <Text style={styles.followersCount}>{following.length}</Text>
+                  <View style={styles.sectionHeading}>
+                    <Text style={styles.sectionIcon}>↗</Text>
+                    <View>
+                      <Text style={styles.sectionLabel}>PEOPLE YOU FOLLOW</Text>
+                      <Text style={styles.listTitle}>Siguiendo</Text>
+                    </View>
                   </View>
                   <View style={styles.followersHeaderRight}>
-                    <Text style={styles.sourceText} numberOfLines={1}>{followingSource}</Text>
-                    <Text style={styles.expandIcon}>{isFollowingExpanded ? '−' : '+'}</Text>
+                    <Text style={styles.panelCount}>{following.length}</Text>
+                    <Text style={styles.expandIcon}>{isFollowingExpanded ? '⌃' : '⌄'}</Text>
                   </View>
                 </Pressable>
                 {isFollowingExpanded && following.length ? (
                   <View style={styles.followersList}>
-                    <View style={styles.accountsGrid}>
-                    {followingPageItems.map((account) => (
-                      <View
-                        key={account.username}
-                        style={styles.accountTile}
-                      >
-                        <Text style={styles.avatar}>{account.username.slice(0, 1).toUpperCase()}</Text>
-                        <Text style={styles.username}>@{account.username}</Text>
-                        <ProfileLink href={account.href} onPress={() => openProfile(account.href)} />
-                      </View>
-                    ))}
-                    </View>
+                    <AccountGrid accounts={followingPageItems} page={followingPage} columns={accountColumns} onOpen={openProfile} />
                     <Pagination
                       page={followingPage}
                       totalItems={following.length}
@@ -274,6 +291,41 @@ export default function App() {
                 ) : null}
               </View>
             ) : null}
+            {followersSource && followingSource ? (
+              <View style={styles.followersPanel}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: isPendingExpanded }}
+                  onPress={() => setIsPendingExpanded((expanded) => !expanded)}
+                  style={styles.followersHeader}
+                >
+                  <View style={styles.sectionHeading}>
+                    <Text style={styles.sectionIcon}>○</Text>
+                    <View>
+                      <Text style={styles.sectionLabel}>PEOPLE YOU DON'T FOLLOW BACK</Text>
+                      <Text style={styles.listTitle}>Pendientes</Text>
+                    </View>
+                  </View>
+                  <View style={styles.followersHeaderRight}>
+                    <Text style={styles.panelCount}>{pendingFollows.length}</Text>
+                    <Text style={styles.expandIcon}>{isPendingExpanded ? '⌃' : '⌄'}</Text>
+                  </View>
+                </Pressable>
+                {isPendingExpanded && pendingFollows.length ? (
+                  <View style={styles.followersList}>
+                    <AccountGrid accounts={pendingPageItems} page={pendingPage} columns={accountColumns} onOpen={openProfile} />
+                    <Pagination
+                      page={pendingPage}
+                      totalItems={pendingFollows.length}
+                      onPrevious={() => setPendingPage((page) => page - 1)}
+                      onNext={() => setPendingPage((page) => page + 1)}
+                    />
+                  </View>
+                ) : isPendingExpanded ? (
+                  <Text style={styles.emptyText}>No hay cuentas pendientes.</Text>
+                ) : null}
+              </View>
+            ) : null}
             {followingSource && followersSource ? (
               <View style={styles.followersPanel}>
                 <Pressable
@@ -282,29 +334,21 @@ export default function App() {
                   onPress={() => setIsNotFollowingExpanded((expanded) => !expanded)}
                   style={styles.followersHeader}
                 >
-                  <View>
-                    <Text style={styles.sectionLabel}>NO TE SIGUEN DE VUELTA</Text>
-                    <Text style={styles.followersCount}>{notFollowingBack.length}</Text>
+                  <View style={styles.sectionHeading}>
+                    <Text style={styles.sectionIcon}>↙</Text>
+                    <View>
+                      <Text style={styles.sectionLabel}>PEOPLE YOU FOLLOW</Text>
+                      <Text style={styles.listTitle}>No te siguen</Text>
+                    </View>
                   </View>
                   <View style={styles.followersHeaderRight}>
-                    <Text style={styles.sourceText} numberOfLines={1}>CUENTAS QUE SIGUES</Text>
-                    <Text style={styles.expandIcon}>{isNotFollowingExpanded ? '−' : '+'}</Text>
+                    <Text style={styles.panelCount}>{notFollowingBack.length}</Text>
+                    <Text style={styles.expandIcon}>{isNotFollowingExpanded ? '⌃' : '⌄'}</Text>
                   </View>
                 </Pressable>
                 {isNotFollowingExpanded && notFollowingBack.length ? (
                   <View style={styles.followersList}>
-                    <View style={styles.accountsGrid}>
-                    {notFollowingPageItems.map((account) => (
-                      <View
-                        key={account.username}
-                        style={styles.accountTile}
-                      >
-                        <Text style={styles.avatar}>{account.username.slice(0, 1).toUpperCase()}</Text>
-                        <Text style={styles.username}>@{account.username}</Text>
-                        <ProfileLink href={account.href} onPress={() => openProfile(account.href)} />
-                      </View>
-                    ))}
-                    </View>
+                    <AccountGrid accounts={notFollowingPageItems} page={notFollowingPage} columns={accountColumns} onOpen={openProfile} />
                     <Pagination
                       page={notFollowingPage}
                       totalItems={notFollowingBack.length}
@@ -324,34 +368,71 @@ export default function App() {
   );
 }
 
-function ProfileLink({ href, onPress }: { href: string; onPress: () => void }) {
-  if (Platform.OS === 'web') {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        style={{
-          backgroundColor: '#d96843',
-          borderRadius: 5,
-          color: '#fffaf3',
-          display: 'inline-block',
-          fontSize: 12,
-          fontWeight: 700,
-          marginTop: 8,
-          padding: '7px 10px',
-          textDecoration: 'none',
-        }}
-      >
-        Ver perfil ↗
-      </a>
-    );
-  }
+function Metric({ label, count, index, compact }: { label: string; count: number; index: number; compact: boolean }) {
+  const showDivider = compact ? index % 2 === 0 : index < 3;
 
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.profileButton}>
-      <Text style={styles.profileButtonText}>Ver perfil ↗</Text>
-    </Pressable>
+    <View style={[styles.metric, compact && styles.metricCompact, showDivider && styles.metricDivider]}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{count}</Text>
+    </View>
+  );
+}
+
+function AccountGrid({
+  accounts,
+  page,
+  columns,
+  onOpen,
+}: {
+  accounts: Follower[];
+  page: number;
+  columns: number;
+  onOpen: (href: string) => void;
+}) {
+  return (
+    <View style={styles.accountsGrid}>
+      {accounts.map((account, index) => {
+        const content = (
+          <>
+            <Text style={styles.accountIndex}>{page * accountsPerPage + index + 1}</Text>
+            <Text numberOfLines={1} style={styles.username}>@{account.username}</Text>
+          </>
+        );
+
+        return Platform.OS === 'web' ? (
+          <a
+            key={account.username}
+            href={account.href}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              alignItems: 'center',
+              borderBottom: '1px solid #e1dbd0',
+              boxSizing: 'border-box',
+              color: 'inherit',
+              display: 'flex',
+              flexDirection: 'row',
+              minHeight: 43,
+              padding: '0 7px',
+              textDecoration: 'none',
+              width: `${100 / columns}%`,
+            }}
+          >
+            {content}
+          </a>
+        ) : (
+          <Pressable
+            key={account.username}
+            accessibilityRole="link"
+            onPress={() => onOpen(account.href)}
+            style={[styles.accountTile, { width: `${100 / columns}%` }]}
+          >
+            {content}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -500,45 +581,65 @@ function profileUrl(username: string, originalHref: unknown) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f5f1ea',
+    backgroundColor: '#f3f0e8',
   },
   header: {
-    backgroundColor: '#182b35',
-    paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 56,
+    backgroundColor: '#f3f0e8',
+    borderBottomColor: '#ddd6ca',
+    borderBottomWidth: 1,
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 20,
   },
   headerInner: {
     width: '100%',
-    maxWidth: 960,
+    maxWidth: 1040,
     alignSelf: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  brand: {
+    color: '#26392e',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+  },
+  help: {
+    color: '#536458',
+    fontSize: 14,
   },
   eyebrow: {
-    color: '#f0a27d',
+    color: '#71836f',
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 16,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    marginBottom: 18,
   },
   title: {
-    color: '#fffaf3',
-    fontSize: 38,
-    fontWeight: '700',
-    lineHeight: 45,
-    maxWidth: 600,
+    color: '#26392e',
+    fontFamily: Platform.OS === 'web' ? 'Georgia, serif' : undefined,
+    fontSize: 58,
+    fontWeight: '500',
+    lineHeight: 66,
+    maxWidth: 720,
   },
   subtitle: {
-    color: '#b8c7c7',
-    fontSize: 16,
-    lineHeight: 25,
-    marginTop: 14,
-    maxWidth: 540,
+    color: '#657267',
+    fontSize: 17,
+    lineHeight: 27,
+    marginTop: 16,
+    maxWidth: 560,
+  },
+  hero: {
+    paddingTop: 66,
+    paddingBottom: 34,
   },
   content: {
     width: '100%',
-    maxWidth: 960,
+    maxWidth: 1090,
     alignSelf: 'center',
-    padding: 24,
+    paddingHorizontal: 18,
     paddingBottom: 64,
   },
   hiddenInput: {
@@ -546,43 +647,59 @@ const styles = StyleSheet.create({
   },
   uploadPanel: {
     alignItems: 'center',
-    backgroundColor: '#fffaf3',
-    borderColor: '#decfc0',
-    borderRadius: 8,
+    backgroundColor: '#fbfcf8',
+    borderColor: '#aab9a7',
+    borderRadius: 4,
     borderStyle: 'dashed',
-    borderWidth: 1,
+    borderWidth: 1.5,
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingVertical: 42,
+  },
+  uploadIcon: {
+    alignItems: 'center',
+    backgroundColor: '#e6ebe2',
+    borderRadius: 24,
+    color: '#526a55',
+    fontSize: 24,
+    fontWeight: '500',
+    height: 48,
+    lineHeight: 48,
+    marginBottom: 18,
+    textAlign: 'center',
+    width: 48,
   },
   panelTitle: {
-    color: '#182b35',
-    fontSize: 22,
-    fontWeight: '700',
+    color: '#26392e',
+    fontSize: 20,
+    fontWeight: '600',
   },
   panelText: {
-    color: '#647274',
-    fontSize: 15,
+    color: '#657267',
+    fontSize: 14,
     lineHeight: 22,
     marginBottom: 24,
-    marginTop: 8,
+    marginTop: 10,
     maxWidth: 440,
     textAlign: 'center',
   },
   primaryButton: {
-    backgroundColor: '#d96843',
-    borderRadius: 6,
-    paddingHorizontal: 24,
-    paddingVertical: 13,
+    backgroundColor: '#526a55',
+    borderRadius: 4,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
   },
   primaryButtonText: {
-    color: '#fffaf3',
-    fontSize: 15,
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '700',
   },
   hint: {
-    color: '#8c9896',
-    fontSize: 12,
-    marginTop: 14,
+    color: '#849184',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    marginTop: 18,
+    textAlign: 'center',
   },
   error: {
     color: '#a63b32',
@@ -602,32 +719,75 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   results: {
-    backgroundColor: '#fffaf3',
-    borderColor: '#decfc0',
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 24,
-    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    marginTop: 0,
   },
   resultsHeader: {
-    alignItems: 'flex-start',
-    borderBottomColor: '#eadfd4',
+    alignItems: 'center',
+    backgroundColor: '#f7f5ef',
+    borderColor: '#d8d1c5',
+    borderWidth: 1,
+    flexDirection: 'row',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  fileMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fileIcon: {
+    color: '#d85c43',
+    fontSize: 24,
+    marginRight: 14,
+  },
+  readyLabel: {
+    color: '#438b79',
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    fontSize: 10,
+    letterSpacing: 1,
+    marginLeft: 'auto',
+  },
+  metrics: {
+    borderBottomColor: '#d8d1c5',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
+    flexWrap: 'wrap',
+    marginBottom: 22,
+  },
+  metric: {
+    borderRightColor: '#d8d1c5',
+    borderRightWidth: 1,
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    width: '25%',
+  },
+  metricCompact: {
+    width: '50%',
+  },
+  metricDivider: {
+    borderRightColor: '#d8d1c5',
+  },
+  metricLabel: {
+    color: '#89908a',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  metricValue: {
+    color: '#172d40',
+    fontSize: 27,
+    fontWeight: '600',
   },
   sectionLabel: {
-    color: '#d96843',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
+    color: '#8b9694',
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    fontSize: 9,
+    letterSpacing: 0.7,
   },
   fileName: {
-    color: '#182b35',
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 6,
+    color: '#172d40',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 3,
   },
   counts: {
     alignItems: 'flex-end',
@@ -641,46 +801,60 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   followersPanel: {
-    borderTopColor: '#eadfd4',
-    borderTopWidth: 1,
+    backgroundColor: '#f7f5ef',
+    borderColor: '#d8d1c5',
+    borderWidth: 1,
+    marginBottom: 16,
   },
   followersHeader: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 20,
+    minHeight: 82,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  sectionHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  sectionIcon: {
+    alignItems: 'center',
+    backgroundColor: '#f1d4c8',
+    borderRadius: 20,
+    color: '#b9503b',
+    fontSize: 20,
+    height: 40,
+    lineHeight: 40,
+    marginRight: 14,
+    textAlign: 'center',
+    width: 40,
+  },
+  listTitle: {
+    color: '#172d40',
+    fontSize: 21,
+    fontWeight: '600',
+    marginTop: 2,
   },
   followersHeaderRight: {
     alignItems: 'center',
     flexDirection: 'row',
-    flexShrink: 1,
-    marginLeft: 16,
+    marginLeft: 10,
   },
-  followersCount: {
-    color: '#182b35',
-    fontSize: 34,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  sourceText: {
-    color: '#9aa4a1',
-    flexShrink: 1,
-    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
-    fontSize: 11,
-    marginLeft: 16,
-    maxWidth: 360,
+  panelCount: {
+    color: '#77818a',
+    fontSize: 13,
   },
   expandIcon: {
-    color: '#d96843',
-    fontSize: 24,
-    fontWeight: '400',
-    marginLeft: 16,
-    width: 20,
+    color: '#78827d',
+    fontSize: 22,
+    marginLeft: 18,
   },
   followersList: {
-    borderTopColor: '#eadfd4',
+    borderTopColor: '#d8d1c5',
     borderTopWidth: 1,
-    padding: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 5,
   },
   accountsGrid: {
     flexDirection: 'row',
@@ -688,58 +862,22 @@ const styles = StyleSheet.create({
   },
   accountTile: {
     alignItems: 'center',
-    borderBottomColor: '#f0e8df',
-    borderBottomWidth: 1,
-    flexDirection: 'column',
-    justifyContent: 'center',
-    minHeight: 112,
-    paddingHorizontal: 8,
-    width: '33.3333%',
-  },
-  followerRow: {
-    alignItems: 'center',
-    borderBottomColor: '#f0e8df',
+    borderBottomColor: '#e1dbd0',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 48,
-    paddingHorizontal: 8,
+    minHeight: 43,
+    paddingHorizontal: 7,
   },
-  avatar: {
-    alignItems: 'center',
-    backgroundColor: '#f5d8ca',
-    borderRadius: 16,
-    color: '#b64f31',
-    fontSize: 13,
-    fontWeight: '800',
-    height: 32,
-    lineHeight: 32,
-    marginRight: 12,
-    textAlign: 'center',
-    width: 32,
+  accountIndex: {
+    color: '#ac9e8c',
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    fontSize: 9,
+    marginRight: 8,
   },
   username: {
-    color: '#182b35',
+    color: '#243d56',
     flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  profileLink: {
-    color: '#d96843',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  profileButton: {
-    alignItems: 'center',
-    backgroundColor: '#d96843',
-    borderRadius: 5,
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  profileButtonText: {
-    color: '#fffaf3',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
   },
   emptyText: {
     color: '#647274',
